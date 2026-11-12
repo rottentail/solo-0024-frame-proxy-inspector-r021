@@ -106,40 +106,6 @@ def _scene_records(
     return tuple(scenes)
 
 
-@dataclass(frozen=True, slots=True)
-class _SamplingTimeline:
-    source_frames: tuple[int, ...]
-    source_length: int
-
-    @property
-    def dense_frames(self) -> tuple[int, ...]:
-        return tuple(range(len(self.source_frames)))
-
-    @property
-    def dense_length(self) -> int:
-        return len(self.source_frames)
-
-    def source_cut(self, position: int) -> int:
-        if position >= self.dense_length:
-            return self.source_length
-        return self.source_frames[position]
-
-    def detect(
-        self,
-        fingerprints: tuple[FrameFingerprint, ...],
-        sensitivity: float,
-        minimum: int,
-    ) -> list[int]:
-        positions = _detect_cut_frames(
-            self.dense_length,
-            self.dense_frames,
-            fingerprints,
-            sensitivity,
-            minimum,
-        )
-        return [self.source_cut(position) for position in positions]
-
-
 def analyze_frames(
     frame_count: int,
     sampled_frames: tuple[int, ...],
@@ -148,8 +114,12 @@ def analyze_frames(
     sensitivity: float,
     min_scene_frames: int,
 ) -> AnalysisResult:
-    timeline = _SamplingTimeline(sampled_frames, frame_count)
-    cuts = timeline.detect(
+    # Cut positions and the minimum scene length are always measured in
+    # source frames. The sample stride only changes how densely the clip is
+    # observed; it must not change the meaning of min_scene_frames.
+    cuts = _detect_cut_frames(
+        frame_count,
+        sampled_frames,
         fingerprints,
         sensitivity,
         min_scene_frames,

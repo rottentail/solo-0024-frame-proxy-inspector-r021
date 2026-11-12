@@ -134,40 +134,6 @@ class SceneRecord:
         )
 
 
-def _scene_sample_positions(
-    scenes: list[SceneRecord],
-    stride: int,
-) -> list[dict[str, int]]:
-    return [
-        {
-            "index": scene.index,
-            "start": scene.start_frame // stride,
-            "end": scene.end_frame // stride,
-            "representative": scene.representative_frame // stride,
-        }
-        for scene in scenes
-    ]
-
-
-def _restore_inspection_scenes(data: dict[str, Any]) -> list[SceneRecord]:
-    stride = max(1, int(data.get("sample_stride", 1)))
-    scenes = [
-        SceneRecord.from_dict(item)
-        for item in data.get("scenes", [])
-        if isinstance(item, dict)
-    ]
-    if stride == 1 or not scenes:
-        return scenes
-    positions = data.get("sample_positions")
-    if not isinstance(positions, list) or len(positions) != len(scenes):
-        positions = _scene_sample_positions(scenes, stride)
-    for scene, position in zip(scenes, positions):
-        scene.start_frame = int(position["start"]) * stride
-        scene.end_frame = int(position["end"]) * stride
-        scene.representative_frame = int(position["representative"]) * stride
-    return scenes
-
-
 @dataclass(slots=True)
 class InspectionRecord:
     inspection_id: str
@@ -200,11 +166,6 @@ class InspectionRecord:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
-        if self.state == "indexed" and self.sample_stride > 1:
-            value["sample_positions"] = _scene_sample_positions(
-                self.scenes,
-                self.sample_stride,
-            )
         if self.error_code is not None:
             value["error_code"] = self.error_code
         if self.error_message is not None:
@@ -232,7 +193,14 @@ class InspectionRecord:
             min_scene_frames=int(data["min_scene_frames"]),
             sampled_frames=[int(value) for value in data.get("sampled_frames", [])],
             cut_frames=[int(value) for value in data.get("cut_frames", [])],
-            scenes=_restore_inspection_scenes(data),
+            # Scene ranges are stored as exact source frame numbers and are
+            # loaded verbatim. A legacy "sample_positions" member, when
+            # present in older records, is derived data and is ignored.
+            scenes=[
+                SceneRecord.from_dict(item)
+                for item in data.get("scenes", [])
+                if isinstance(item, dict)
+            ],
             transitions=transitions,
             error_code=data.get("error_code"),
             error_message=data.get("error_message"),

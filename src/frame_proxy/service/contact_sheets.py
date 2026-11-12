@@ -21,31 +21,6 @@ class ContactSheetService:
         self._repository = repository
         self._settings = settings
 
-    @staticmethod
-    def _sample_source_frame(inspection, requested: int, frame_count: int) -> int:
-        stride = max(1, inspection.sample_stride)
-        if stride == 1:
-            return requested
-        available = sorted(
-            frame for frame in inspection.sampled_frames
-            if 0 <= frame < frame_count
-        )
-        if not available:
-            available = list(range(0, frame_count, stride))
-        lower = available[0]
-        upper = available[-1]
-        for candidate in available:
-            if candidate <= requested:
-                lower = candidate
-            if candidate >= requested:
-                upper = candidate
-                break
-        left_distance = requested - lower
-        right_distance = upper - requested
-        if left_distance <= right_distance:
-            return lower
-        return upper
-
     def create(
         self,
         inspection_id: str,
@@ -102,15 +77,13 @@ class ContactSheetService:
                     ) // 2
                 else:
                     frame_index = scene.representative_frame
-                source_index = self._sample_source_frame(
-                    inspection,
-                    frame_index,
-                    descriptor.frame_count,
-                )
+                # The tile map declares this exact source frame, so the tile
+                # must be rendered from it. The inspection's sample stride
+                # only affected detection density, never frame identity.
                 frames[frame_index] = decode_frame_at(
                     media,
                     descriptor,
-                    source_index,
+                    frame_index,
                 )
             result = compose_grid(
                 plan=plan,
